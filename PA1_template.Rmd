@@ -1,25 +1,192 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+author: "Julian Carrillo"
+date: "28/8/2020"
+output: html_document
 ---
 
+## Resumen de analisis al conjunto de datos.
 
-## Loading and preprocessing the data
+# 1. Código para leer en el conjunto de datos y/o procesar los datos.  
+
+El repositorio que fue dado, se clonó y en este se encuentran los datos en un archivo .zip, así que esa carpeta será nuestro espacio de trabajo.  Los datos son descomprimidos, leidos y la columna date es convertida a tipo Date. Ademas de cargar librerias necesarias para el desarrollo de la actividad.
+
+```{r Obtención y limpieza}
+library(ggplot2)
+library(dplyr)
+wd=getwd() 
+unzip(zipfile = "activity.zip", exdir = wd)
+data=read.csv("activity.csv")
+#La columna "date" se conviertea tipo Date.
+data$date=as.Date(data$date)
+```
+
+# 2. ¿Cuál es el número total medio de pasos dados por día?
+
+Se crea un dataframe, donde se almacenará la cantidad de pasos por día.
+```{r Dataframe de pasos por día}
+stepsday=data.frame()
+stepsday=data %>%
+        group_by(date) %>%
+        summarize(sumsteps = sum(steps, na.rm = TRUE)) 
+
+head(stepsday)
+```
+Ahora realizamos el histograma que nos muestra la cantidad de pasos dados cada dia.
+
+```{r Histograma}
+ggplot(stepsday,aes(y=sumsteps,x=date))+
+      geom_bar(stat="identity")+
+      ylab("Total de pasos")+
+      xlab("Fecha")+
+      ggtitle("Total de pasos por día")
+```
+
+Calculamos la media y la mediana de pasos dados por día.
+```{r Media y mediana}
+mean.day=round(mean(stepsday$sumsteps),digits = 2)
+median.day=round(median(stepsday$sumsteps),digits = 2)
+```
+
+Con lo anterior tenemos que, la media es `r mean.day` y la mediana es  `r median.day`.
+
+# 3. ¿Cuál es el patrón de actividad diaria promedio?
+
+Se crea un dataframe el cual agrupa la media de pasos dados en cada intervalo de tiempo.
+
+```{r Media de pasos por intervalo}
+steps.interval=data %>%
+               group_by(interval) %>%
+               summarize(mean.steps = mean(steps, na.rm = TRUE))
+
+head(steps.interval)
+
+```
+
+Se muestra la grafica de tipo 1 del conjunto de datos steps.interval.
+
+```{r}
+plot(steps.interval$mean.steps ~ steps.interval$interval,
+     col="black", type="l", xlab = "Intervalos de 5 minutos",
+     ylab = "Número promedio de pasos",
+     main = "Pasos por intervalo de tiempo")
+
+```
+
+Se calcula el intervalo con la mayor cantidad de pasos.
+
+```{r Intervalo}
+interval=steps.interval$interval[which.max(steps.interval$mean.steps)]
+numstps=round(max(steps.interval$mean.steps),digits=2)
+```
+
+El intervalos con la mayor cantidad de pasos es `r interval`, y el número de pasos en el intervalo es de `r numstps` .
+
+# 4. Imputación de valores perdidos
+
+Ahora miraremos la cantidad de datos N.A (falatantes).
+
+```{r Número de datos N.a}
+numNA=sum(is.na(data$steps))
+```
+
+La cantidad de datos faltantes es `r numNA`.  
+Una estrategia para reemplazar los datos falatantes, es tomar la media de pasos dados en el intervalo correspondiente del dato faltante, para este hecho crearemos un nuevo dataframe donde se almacenará estos nuevos datos.
+
+```{r Reemplazo de N.A}
+new.data=data
+for (i in 1:nrow(data)){
+        if(is.na(data$steps[i])){
+                new.data$steps[i]=steps.interval$mean.steps[new.data$interval[i]==steps.interval$interval]
+        }
+}
+head(new.data)
+```
+
+Este nuevo conjunto de datos tambien se puede agrupar por día, y ver la cantidad de pasos por día.
+
+```{r }
+new.stepsday=data.frame()
+new.stepsday=new.data %>%
+        group_by(date) %>%
+        summarize(sumsteps = sum(steps, na.rm = TRUE)) 
+head(new.stepsday)
+```
+
+Se muestra a continuación un histograma del nuevo conjunto de datos.
+
+```{r histograma 2}
+ggplot(new.stepsday,aes(y=sumsteps,x=date))+
+       geom_bar(stat="identity")+
+       ylab("Total de pasos")+
+       xlab("Fecha")+
+       ggtitle("Total de pasos por día")
+
+```
+
+La media y la mediana de este conjunto de datos se calcula a continuación.
+
+```{r }
+new.mean.day=round(mean(new.stepsday$sumsteps),digits = 4)
+new.median.day=round(median(new.stepsday$sumsteps),digits = 4)
+```
+
+Con lo anterior tenemos que, la media es `r new.mean.day` y la mediana es  `r new.median.day`.  
+Ahora bien este nuevo conjunto de datos si difiere del primero, pues es claro que tanto como la media de pasos por días, aumento, a su vez que la mediana. Podemos ver que el segundo histograma es más denso y casi no tiene espacios nulos, se debe recordar que estamos introduciendo 2304 nuevos datos que no existian.
+
+# 5. ¿Existen diferencias en los patrones de actividad entre los días de semana y los fines de semana?
+
+Para este caso, crearemos un dataframe en el cual introduciremos una variable tipo factor, la cual clasificará el día ya sea  en "weekend" o "weekday"".
+
+```{r Tipo de día}
+data.dayweek=new.data
+data.dayweek$date=as.Date(data.dayweek$date)
+#crea un factor dependiendo si es dia entre semana o fin de semana
+data.dayweek$day=ifelse(weekdays(data.dayweek$date) %in% c("sabado", "domingo"), "weekend", "weekday")
+data.dayweek$day=as.factor(data.dayweek$day)
+```
+
+Luego filtraremos por separado los dias "weekend" y "weekday"".
+
+``` {r filtrado}
+Weekday=filter(data.dayweek, data.dayweek$day == "weekday")
+Weekend=filter(data.dayweek, data.dayweek$day == "weekend")
+```
+
+Ahora por separado, cada dataframe se agrupará la media de pasos por intervalo de tiempo. Y despues estos dos conjuntos formaran uno solo.
+
+```{r}
+Weekday=Weekday %>%
+        group_by(interval) %>%
+        summarize(steps = mean(steps)) 
+Weekday$day="weekday"
+
+head(Weekday)
+
+Weekend=Weekend %>%
+        group_by(interval) %>%
+        summarize(steps = mean(steps)) 
+Weekend$day="weekend"
+
+head(Weekend)
+
+wkdayWkend=rbind(Weekday, Weekend)
+wkdayWkend$day=as.factor(wkdayWkend$day)
+```
+
+Con el conjunto de datos "wkdayWkend" se procede a realizar la siguiente grafica.
+
+```{r Grafica por tipo de día}
+g <- ggplot (wkdayWkend, aes (interval, steps))
+g + geom_line() + facet_grid (day~.) + 
+        theme(axis.text = element_text(size = 12),axis.title = element_text(size = 14)) + 
+        labs(y = "Número de pasos") + labs(x = "Intervalo") + 
+        ggtitle("Promedio de pasos - Weekday vs. Weekend") + 
+        theme(plot.title = element_text(hjust = 0.5))
+````
+
+  
+  Fin del analisis.
 
 
 
-## What is mean total number of steps taken per day?
-
-
-
-## What is the average daily activity pattern?
-
-
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
